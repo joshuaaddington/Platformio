@@ -6,8 +6,8 @@ float target_position = 0.0;
 float received_position = 0.0;
 
 void setup() {
-  Serial.begin(115200);            // For user input/debugging
-  Serial1.begin(115200, SERIAL_8N1, 16, 17); // UART to motor board (TX=17, RX=16)
+  Serial.begin(9600);            // For user input/debugging
+  Serial1.begin(115200, SERIAL_8N1, 17, 16); // UART to motor board (TX=17, RX=16)
   transfer.begin(Serial1);
 
   Serial.println("Main controller ready.");
@@ -15,11 +15,9 @@ void setup() {
 
 void loop() {
   // Example input from user: T3.14
-  if (Serial.available()) {
-    String input = Serial.readStringUntil('\n');
-    if (input.charAt(0) == 'T') {
-      target_position = input.substring(1).toFloat();
-    }
+  float joystickX = (analogRead(39) * 100 / 4095.0) - 50; // Read joystick X-axis
+  if (abs(joystickX) > 5){
+    target_position = joystickX;
   }
 
   // Send position command
@@ -33,5 +31,5 @@ void loop() {
     Serial.println(received_position, 4);
   }
 
-  delay(50); // Adjust as needed for responsiveness
+  delay(20); // Adjust as needed for responsiveness
 }
