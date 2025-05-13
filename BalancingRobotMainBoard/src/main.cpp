@@ -58,8 +58,6 @@ void loop() {
   // Check if the input is outside the deadzone
   if (abs(input) > (max_velocity / 7.5)) {
     outgoingData.target_position = input;
-    Serial.print("Sending target velocity: ");
-    Serial.println(outgoingData.target_position);
 
     esp_now_send(receiverMac, (uint8_t *) &outgoingData, sizeof(outgoingData));
     lastCommandTime = millis();
