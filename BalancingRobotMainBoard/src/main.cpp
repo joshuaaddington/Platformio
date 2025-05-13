@@ -1,35 +1,80 @@
-#include <SerialTransfer.h>
+#include <esp_now.h>
+#include <WiFi.h>
 
-SerialTransfer transfer;
+typedef struct struct_message {
+  float target_position;
+  float current_position; // This is what will be received
+} struct_message;
 
-float target_position = 0.0;
-float received_position = 0.0;
+struct_message outgoingData;
+struct_message incomingData;
+
+// Maximum velocity for the motor
+float max_velocity = 100.0;
+
+// MAC address of the receiver ESP32 (Motor Controller)
+// 30:c6:f7:31:a1:f4
+uint8_t receiverMac[] = {0x30, 0xc6, 0xf7, 0x31, 0xa1, 0xf4};
+
+void OnDataRecv(const esp_now_recv_info_t *esp_now_info, const uint8_t *incomingDataRaw, int len) {
+  memcpy(&incomingData, incomingDataRaw, sizeof(incomingData));
+  Serial.print("Current position: ");
+  Serial.println(incomingData.current_position);
+}
+
 
 void setup() {
-  Serial.begin(9600);            // For user input/debugging
-  Serial1.begin(115200, SERIAL_8N1, 17, 16); // UART to motor board (TX=17, RX=16)
-  transfer.begin(Serial1);
+  Serial.begin(9600);
+  WiFi.mode(WIFI_STA);
+  Serial.println("Sender MAC: " + WiFi.macAddress());
 
-  Serial.println("Main controller ready.");
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+
+  esp_now_register_recv_cb(OnDataRecv);
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, receiverMac, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer");
+    return;
+  }
+
+  Serial.println("ESP-NOW sender ready.");
 }
+
+unsigned long lastCommandTime = 0;
+bool commandRecentlySent = false;
 
 void loop() {
-  // Example input from user: T3.14
-  float joystickX = (analogRead(39) * 100 / 4095.0) - 50; // Read joystick X-axis
-  if (abs(joystickX) > 5){
-    target_position = joystickX;
+  // Simulate joystick input
+  float input = analogRead(39) * (max_velocity * 2) / 4095.0 - (max_velocity);
+
+  // Check if the input is outside the deadzone
+  if (abs(input) > (max_velocity / 7.5)) {
+    outgoingData.target_position = input;
+    Serial.print("Sending target velocity: ");
+    Serial.println(outgoingData.target_position);
+
+    esp_now_send(receiverMac, (uint8_t *) &outgoingData, sizeof(outgoingData));
+    lastCommandTime = millis();
+    commandRecentlySent = true;
+  } else {
+    // If no valid command recently and timeout exceeded, send 0
+    if (commandRecentlySent && millis() - lastCommandTime > 50) {
+      outgoingData.target_position = 0.0;
+      Serial.println("Sending timeout command: 0.0");
+
+      esp_now_send(receiverMac, (uint8_t *) &outgoingData, sizeof(outgoingData));
+      commandRecentlySent = false;  // Avoid repeated 0 commands
+    }
   }
 
-  // Send position command
-  transfer.txObj(target_position);
-  transfer.sendData(sizeof(target_position));
-
-  // Receive current position
-  if (transfer.available()) {
-    transfer.rxObj(received_position);
-    Serial.print("Motor position: ");
-    Serial.println(received_position, 4);
-  }
-
-  delay(20); // Adjust as needed for responsiveness
+  delay(20);
 }
+
