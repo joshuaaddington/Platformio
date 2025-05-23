@@ -3,7 +3,7 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 
-#define SDA_MPU 21
+#define SDA_MPU 21 
 #define SCL_MPU 22
 
 Adafruit_MPU6050 mpu;
